@@ -16,11 +16,12 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: set up go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.go-version }}
+          check-latest: true
       - name: fmt, tidy
         run: |
           make install
@@ -34,11 +35,12 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: set up go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.go-version }}
+          check-latest: true
       - name: lint
         run: |
           make install
@@ -49,13 +51,14 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: install udev
         run: sudo apt-get install -y libudev-dev
       - name: set up go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.go-version }}
+          check-latest: true
       - name: build
         run: make build
 
@@ -64,10 +67,11 @@ jobs:
     timeout-minutes: 2
     steps:
       - name: checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       - name: set up go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
         with:
           go-version: ${{ env.go-version }}
+          check-latest: true
       - name: go test
         run: make test
