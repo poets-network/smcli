@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"crypto"
-	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,8 +15,11 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/hashicorp/go-secure-stdlib/password"
 	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
 	pb "github.com/spacemeshos/api/release/go/spacemesh/v1"
 	"github.com/spacemeshos/go-spacemesh/common/types"
+	"github.com/spacemeshos/go-spacemesh/genvm/sdk"
+	walletSdk "github.com/spacemeshos/go-spacemesh/genvm/sdk/wallet"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"google.golang.org/grpc"
@@ -388,12 +390,77 @@ var balanceCmd = &cobra.Command{
 	},
 }
 
+var sendCmd = &cobra.Command{
+	Use:   "send [wallet file] [node uri] [recipient address] [smh amount]",
+	Short: "Send transaction",
+	Args:  cobra.ExactArgs(4),
+	Run: func(cmd *cobra.Command, args []string) {
+		walletFn := args[0]
+		nodeURI := args[1]
+		recipientAddressString := args[2]
+		smhAmountString := args[3]
+
+		types.SetNetworkHRP(hrp)
+
+		w, err := openWallet(walletFn)
+		cobra.CheckErr(err)
+
+		nodeConn, err := grpc.NewClient(nodeURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		cobra.CheckErr(err)
+		defer nodeConn.Close()
+
+		recipientAddress, err := types.StringToAddress(recipientAddressString)
+		cobra.CheckErr(err)
+
+		smhAmount, err := strconv.ParseFloat(smhAmountString, 64) // TODO: use decimal
+		cobra.CheckErr(err)
+
+		senderAccount := w.Secrets.Accounts[0] // TODO: flag to select child
+		senderAddress := wallet.PubkeyToAddress(senderAccount.Public, hrp)
+
+		ctx := context.Background()
+
+		meshClient := pb.NewMeshServiceClient(nodeConn)
+		meshResp, err := meshClient.GenesisID(ctx, &pb.GenesisIDRequest{})
+		cobra.CheckErr(err)
+		genesisID := types.Hash20(meshResp.GenesisId)
+
+		globalStateClient := pb.NewGlobalStateServiceClient(nodeConn)
+		accountReq := pb.AccountRequest{AccountId: &pb.AccountId{Address: string(senderAddress)}}
+		accountResp, err := globalStateClient.Account(ctx, &accountReq)
+		cobra.CheckErr(err)
+		nonce := accountResp.AccountWrapper.StateProjected.Counter
+
+		tx := walletSdk.Spend(
+			ed25519.PrivateKey(senderAccount.Private),
+			recipientAddress,
+			uint64(smhAmount*1e9), // TODO: use decimal
+			nonce+1,
+			sdk.WithGenesisID(genesisID),
+		)
+
+		txClient := pb.NewTransactionServiceClient(nodeConn)
+		// txResp, _ := txClient.ParseTransaction(ctx, &api.ParseTransactionRequest{Transaction: tx})
+		// cobra.CheckErr(err)
+
+		sendResp, err := txClient.SubmitTransaction(ctx, &pb.SubmitTransactionRequest{Transaction: tx})
+		cobra.CheckErr(err)
+
+		fmt.Printf("Submitted spend transaction! id=%s status=%d state=%s\n",
+			hex.EncodeToString(sendResp.Txstate.Id.Id),
+			sendResp.Status.Code,
+			sendResp.Txstate.State.String(),
+		)
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(walletCmd)
 	walletCmd.AddCommand(createCmd)
 	walletCmd.AddCommand(readCmd)
 	walletCmd.AddCommand(signCmd)
 	walletCmd.AddCommand(balanceCmd)
+	walletCmd.AddCommand(sendCmd)
 	hrpFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	hrpFlags.StringVar(&hrp, "hrp", types.NetworkHRP(), "Set human-readable address prefix")
 	readCmd.Flags().BoolVarP(&printPrivate, "private", "p", false, "Print private keys")
@@ -404,4 +471,5 @@ func init() {
 	readCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
 	createCmd.Flags().BoolVarP(&useLedger, "ledger", "l", false, "Create a wallet using a Ledger device")
 	balanceCmd.Flags().AddFlagSet(hrpFlags)
+	sendCmd.Flags().AddFlagSet(hrpFlags)
 }
