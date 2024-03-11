@@ -5,10 +5,12 @@ go 1.22.3
 require (
 	github.com/btcsuite/btcutil v1.0.2
 	github.com/jedib0t/go-pretty/v6 v6.5.9
+	github.com/spacemeshos/api/release/go v1.46.0
 	github.com/spacemeshos/economics v0.1.3
 	github.com/spacemeshos/go-spacemesh v1.6.0
 	github.com/spacemeshos/smkeys v1.0.4
 	github.com/stretchr/testify v1.9.0
+	google.golang.org/grpc v1.64.0
 )
 
 require (
@@ -23,6 +25,7 @@ require (
 	github.com/go-llsqlite/crawshaw v0.5.3 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huandu/xstrings v1.2.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.7 // indirect
@@ -45,6 +48,9 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp v0.0.0-20240506185415-9bf2ced13842 // indirect
+	golang.org/x/net v0.25.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240604185151-ef581f913117 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240528184218-531527333157 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
 )
 
@@ -63,7 +69,7 @@ require (
 	github.com/spf13/afero v1.11.0 // indirect
 	github.com/spf13/cast v1.6.0 // indirect
 	github.com/spf13/cobra v1.8.1
-	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.19.0
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/tyler-smith/go-bip39 v1.1.0

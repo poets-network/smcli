@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"crypto"
 	"crypto/ed25519"
 	"encoding/hex"
@@ -15,8 +16,12 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/hashicorp/go-secure-stdlib/password"
 	"github.com/jedib0t/go-pretty/v6/table"
+	pb "github.com/spacemeshos/api/release/go/spacemesh/v1"
 	"github.com/spacemeshos/go-spacemesh/common/types"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/spacemeshos/smcli/common"
 	"github.com/spacemeshos/smcli/wallet"
@@ -335,16 +340,68 @@ var signCmd = &cobra.Command{
 	},
 }
 
+var balanceCmd = &cobra.Command{
+	Use:   "balance [wallet file] [node uri]",
+	Short: "Retrieve balance",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		walletFn := args[0]
+		nodeURI := args[1]
+
+		types.SetNetworkHRP(hrp)
+
+		w, err := openWallet(walletFn)
+		cobra.CheckErr(err)
+
+		ctx := context.Background()
+
+		nodeConn, err := grpc.NewClient(nodeURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		cobra.CheckErr(err)
+		defer nodeConn.Close()
+
+		globalStateClient := pb.NewGlobalStateServiceClient(nodeConn)
+
+		t := table.NewWriter()
+		t.SetOutputMirror(os.Stdout)
+		t.SetTitle("Wallet Balances")
+		t.AppendHeader(table.Row{
+			"#",
+			"address",
+			"path",
+			"name",
+			"balance",
+		})
+		for idx, account := range w.Secrets.Accounts {
+			address := wallet.PubkeyToAddress(account.Public, hrp)
+			accountReq := pb.AccountRequest{AccountId: &pb.AccountId{Address: string(address)}}
+			accountResp, err := globalStateClient.Account(ctx, &accountReq)
+			cobra.CheckErr(err)
+			t.AppendRow(table.Row{
+				idx,
+				wallet.PubkeyToAddress(account.Public, hrp),
+				account.Path.String(),
+				account.DisplayName,
+				float64(accountResp.AccountWrapper.StateProjected.Balance.Value) / 1e9,
+			})
+		}
+		t.Render()
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(walletCmd)
 	walletCmd.AddCommand(createCmd)
 	walletCmd.AddCommand(readCmd)
 	walletCmd.AddCommand(signCmd)
+	walletCmd.AddCommand(balanceCmd)
+	hrpFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
+	hrpFlags.StringVar(&hrp, "hrp", types.NetworkHRP(), "Set human-readable address prefix")
 	readCmd.Flags().BoolVarP(&printPrivate, "private", "p", false, "Print private keys")
 	readCmd.Flags().BoolVarP(&printFull, "full", "f", false, "Print full keys (no abbreviation)")
 	readCmd.Flags().BoolVar(&printBase58, "base58", false, "Print keys in base58 (rather than hex)")
 	readCmd.Flags().BoolVar(&printParent, "parent", false, "Print parent key (not only child keys)")
-	readCmd.Flags().StringVar(&hrp, "hrp", types.NetworkHRP(), "Set human-readable address prefix")
+	readCmd.Flags().AddFlagSet(hrpFlags)
 	readCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
 	createCmd.Flags().BoolVarP(&useLedger, "ledger", "l", false, "Create a wallet using a Ledger device")
+	balanceCmd.Flags().AddFlagSet(hrpFlags)
 }
