@@ -390,6 +390,55 @@ var balanceCmd = &cobra.Command{
 	},
 }
 
+var spawnCmd = &cobra.Command{
+	Use:   "spawn [wallet file] [node uri]",
+	Short: "Spawn wallet",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		walletFn := args[0]
+		nodeURI := args[1]
+
+		types.SetNetworkHRP(hrp)
+
+		w, err := openWallet(walletFn)
+		cobra.CheckErr(err)
+
+		senderAccount := w.Secrets.Accounts[0] // TODO: flag to select child
+
+		ctx := context.Background()
+
+		nodeConn, err := grpc.NewClient(nodeURI, grpc.WithTransportCredentials(insecure.NewCredentials()))
+		cobra.CheckErr(err)
+		defer nodeConn.Close()
+
+		meshClient := pb.NewMeshServiceClient(nodeConn)
+		meshResp, err := meshClient.GenesisID(ctx, &pb.GenesisIDRequest{})
+		cobra.CheckErr(err)
+		genesisID := types.Hash20(meshResp.GenesisId)
+
+		nonce := uint64(0)
+
+		tx := walletSdk.SelfSpawn(
+			ed25519.PrivateKey(senderAccount.Private),
+			nonce,
+			sdk.WithGenesisID(genesisID),
+		)
+
+		txClient := pb.NewTransactionServiceClient(nodeConn)
+		// txResp, _ := txClient.ParseTransaction(ctx, &api.ParseTransactionRequest{Transaction: tx})
+		// cobra.CheckErr(err)
+
+		sendResp, err := txClient.SubmitTransaction(ctx, &pb.SubmitTransactionRequest{Transaction: tx})
+		cobra.CheckErr(err)
+
+		fmt.Printf("Submitted spawn transaction! id=%s status=%d state=%s\n",
+			hex.EncodeToString(sendResp.Txstate.Id.Id),
+			sendResp.Status.Code,
+			sendResp.Txstate.State.String(),
+		)
+	},
+}
+
 var sendCmd = &cobra.Command{
 	Use:   "send [wallet file] [node uri] [recipient address] [smh amount]",
 	Short: "Send transaction",
@@ -460,6 +509,7 @@ func init() {
 	walletCmd.AddCommand(readCmd)
 	walletCmd.AddCommand(signCmd)
 	walletCmd.AddCommand(balanceCmd)
+	walletCmd.AddCommand(spawnCmd)
 	walletCmd.AddCommand(sendCmd)
 	hrpFlags := pflag.NewFlagSet("", pflag.ContinueOnError)
 	hrpFlags.StringVar(&hrp, "hrp", types.NetworkHRP(), "Set human-readable address prefix")
@@ -471,5 +521,6 @@ func init() {
 	readCmd.PersistentFlags().BoolVarP(&debug, "debug", "d", false, "enable debug mode")
 	createCmd.Flags().BoolVarP(&useLedger, "ledger", "l", false, "Create a wallet using a Ledger device")
 	balanceCmd.Flags().AddFlagSet(hrpFlags)
+	spawnCmd.Flags().AddFlagSet(hrpFlags)
 	sendCmd.Flags().AddFlagSet(hrpFlags)
 }
